@@ -1,0 +1,380 @@
+Program.Sub.ScreenSU.Start
+Gui.frmMain..Create
+Gui.frmMain..Caption("Vendor Change Audit")
+Gui.frmMain..Size(13530,10200)
+Gui.frmMain..MinX(0)
+Gui.frmMain..MinY(0)
+Gui.frmMain..Position(0,0)
+Gui.frmMain..BackColor(-2147483633)
+Gui.frmMain..MousePointer(0)
+Gui.frmMain..Event(UnLoad,frmMain_UnLoad)
+Gui.frmMain.GsGcAudit.Create(GsGridControl)
+Gui.frmMain.GsGcAudit.Size(13155,8775)
+Gui.frmMain.GsGcAudit.Position(90,795)
+Gui.frmMain.GsGcAudit.Anchor(15)
+Gui.frmMain.dtpStart.Create(DatePicker)
+Gui.frmMain.dtpStart.Size(1935,285)
+Gui.frmMain.dtpStart.Position(90,360)
+Gui.frmMain.dtpEnd.Create(DatePicker)
+Gui.frmMain.dtpEnd.Size(1935,285)
+Gui.frmMain.dtpEnd.Position(2130,360)
+Gui.frmMain.lblStart.Create(Label,"Start Date",True,1935,255,0,90,150,True,0,"Arial",8,-2147483633,0)
+Gui.frmMain.lblEnd.Create(Label,"End Date",True,1935,255,0,2115,150,True,0,"Arial",8,-2147483633,0)
+Gui.frmMain.cmdRef.Create(Button)
+Gui.frmMain.cmdRef.Size(855,375)
+Gui.frmMain.cmdRef.Position(4170,330)
+Gui.frmMain.cmdRef.Caption("REFRESH")
+Gui.frmMain.cmdRef.Event(Click,cmdRef_Click)
+Gui.frmMain.cmdCrystal.Create(Button)
+Gui.frmMain.cmdCrystal.Size(2040,375)
+Gui.frmMain.cmdCrystal.Position(11205,330)
+Gui.frmMain.cmdCrystal.Anchor(9)
+Gui.frmMain.cmdCrystal.Caption("Export to Crystal Report")
+Gui.frmMain.cmdCrystal.Event(Click,cmdCrystal_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+V.Global.sPath.Declare
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+V.Local.bExists.Declare
+'TJS, Oct 2020
+'Customer: Best Manufacturing
+'Business Case Customer needs to a provide a report of Vendor Master Changes
+'Proposed Solution: We will create a before and after changes log with a GAB Program.
+'14461 - Vendor Load
+'14468 - Vendor Pre Exit
+'14469 - Vendor Pre Save
+'14471 - Vendor Post Clear
+'14475 - Vendor Post Delete
+'42305 - ACH Populate
+'42310 - ACH Exit
+'42312 - ACH Pre-Save
+
+F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+	'Load/Populate
+	F.Intrinsic.Control.CaseAny(14461,42305)
+		F.Intrinsic.Control.If(V.Caller.Hook,=,14461)
+			V.Passed.Global.Set(V.Passed.000002)
+		F.Intrinsic.Control.EndIf
+		
+		F.Intrinsic.Control.CallSub(NameFile)
+			
+		F.Intrinsic.File.Exists(V.Global.sPath,V.Local.bExists)
+		
+		F.Intrinsic.Control.If(V.Local.bExists)
+			F.Intrinsic.File.DeleteFile(V.Global.sPath)
+		F.Intrinsic.Control.EndIf
+		
+		F.Intrinsic.Control.CallSub(InitVal)
+		F.Intrinsic.Control.End
+	'Exit and Clear 
+	F.Intrinsic.Control.CaseAny(14468,14471,42310)
+		F.Intrinsic.Control.CallSub(NameFile)
+		F.Intrinsic.File.Exists(V.Global.sPath,V.Local.bExists)
+		F.Intrinsic.Control.If(V.Local.bExists)
+			F.Intrinsic.File.DeleteFile(V.Global.sPath)
+		F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.End
+	'Save and Delete 
+	F.Intrinsic.Control.CaseAny(14469,14475,42312)
+		V.Passed.Global.Set(V.Passed.000002)
+		F.Intrinsic.Control.CallSub(NameFile)
+		F.Intrinsic.Control.CallSub(Compare)
+		F.Intrinsic.File.Exists(V.Global.sPath,V.Local.bExists)
+		F.Intrinsic.Control.If(V.Local.bExists)
+			F.Intrinsic.File.DeleteFile(V.Global.sPath)
+		F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.End
+	'Dashboard 
+	F.Intrinsic.Control.CaseElse
+		F.Intrinsic.Control.If(V.Caller.Switches,=,"DB")
+			F.Intrinsic.Control.CallSub(SetIcon)			
+			Gui.frmMain..Show
+		F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.NameFile.Start
+F.Intrinsic.Control.Try
+V.Local.sScreen.Declare
+
+F.ODBC.Connection!conts.OpenCompanyConnection
+F.Intrinsic.String.Build("Select RTRIM(SCREEN) from HOOK_GLOBAL where Right(ID,5) = '{0}'",V.Caller.Hook,V.Local.sScreen)
+F.ODBC.Connection!conts.ExecuteAndReturn(V.Local.sScreen,V.Local.sScreen)
+F.ODBC.Connection!conts.Close
+
+F.Communication.Misc.EncodeToString(3,V.Local.sScreen,V.Local.sScreen)
+F.Intrinsic.String.Replace(V.Local.sScreen,"%a0","",V.Local.sScreen)
+F.Communication.Misc.DecodeToString(3,V.Local.sScreen,V.Local.sScreen)
+
+F.Intrinsic.String.Build("{0}{1}_{2}.xml",V.Caller.LocalGSSTempDir,V.Caller.User,V.Local.sScreen.Trim,V.Global.sPath)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.NameFile.End
+
+Program.Sub.ReportData.Start
+F.Intrinsic.Control.Try
+V.Local.sStart.Declare
+V.Local.sEnd.Declare
+V.Local.sSQL.Declare
+
+V.Local.sStart.Set(V.Screen.frmMain!dtpStart.Value)
+V.Local.sEnd.Set(V.Screen.frmMain!dtpEnd.Value)
+
+F.Intrinsic.Control.If(V.Screen.frmMain!dtpEnd.Value,<,V.Screen.frmMain!dtpStart.Value)
+	F.Intrinsic.UI.Msgbox("End date cannot precede Start date","Error")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.If(V.DataTable.dtAuditRpt.Exists)
+	F.Data.DataTable.Close("dtAuditRpt")
+F.Intrinsic.Control.EndIf
+
+F.ODBC.Connection!conts.OpenCompanyConnection
+F.Intrinsic.String.Build("Select * from GCG_6157_VEND_MSTR_AUDIT where CHG_DATE between '{0}' and '{1}'",V.Local.sStart.PervasiveDate,V.Local.sEnd.PervasiveDate,V.Local.sSQL)
+
+F.Data.DataTable.CreateFromSQL("dtAuditRpt","conts",V.Local.sSQL,True)
+
+F.ODBC.Connection!conts.Close
+
+Gui.frmMain.GsGcAudit.AddGridviewFromDatatable("gvAuditRpt","dtAuditRpt")
+Gui.frmMain.GsGcAudit.MainView("gvAuditRpt")
+
+Gui.frmMain.GsGcAudit.SuspendLayout
+
+Gui.frmMain.GsGcAudit.SetGridviewProperty("gvAuditRpt","Editable",False)
+Gui.frmMain.GsGcAudit.SetGridviewProperty("gvAuditRpt","ReadOnly",True)
+
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","VENDOR_ID","HeaderFontBold",True)
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","FIELD_NAME","HeaderFontBold",True)
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","OLD_VALUE","HeaderFontBold",True)
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","NEW_VALUE","HeaderFontBold",True)
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_PGM","HeaderFontBold",True)
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_USER","HeaderFontBold",True)
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_DATE","HeaderFontBold",True)
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_TIME","HeaderFontBold",True)
+
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","VENDOR_ID","Caption","Vendor")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","FIELD_NAME","Caption","Field")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","OLD_VALUE","Caption","Old Value")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","NEW_VALUE","Caption","New Value")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_PGM","Caption","Program")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_USER","Caption","GSS User")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_DATE","Caption","Date Changed")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_TIME","Caption","Time Changed")
+
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_DATE","DisplayCustomDatetime","d")
+Gui.frmMain.GsGcAudit.SetColumnProperty("gvAuditRpt","CHG_TIME","DisplayCustomDatetime","T")
+
+Gui.frmMain.GsGcAudit.ResumeLayout
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.ReportData.End
+
+Program.Sub.InitVal.Start
+F.Intrinsic.Control.Try
+V.local.sRet.Declare
+V.local.sKey.Declare
+V.local.sVal.Declare
+V.Local.sVarName.Declare
+V.Local.iCnt.Declare
+
+F.Intrinsic.Control.If(V.DataTable.dtPassed.Exists)
+	F.Data.DataTable.Close("dtPassed")
+F.Intrinsic.Control.EndIf
+
+F.Data.DataTable.Create("dtPassed",True)
+F.Data.DataTable.AddColumn("dtPassed","VendID","String")
+F.Data.DataTable.AddColumn("dtPassed","PassedVar","String")
+F.Data.DataTable.AddColumn("dtPassed","VarName","String")
+F.Data.DataTable.AddColumn("dtPassed","VarVal","String")
+
+F.Intrinsic.Variable.ListCallerVars(False,V.local.sRet)
+F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+
+F.Intrinsic.Control.For(V.Local.iCnt,V.Local.sRet.LBound,V.Local.sRet.UBound,1)
+	V.Local.sKey.Set(V.Local.sRet(V.Local.iCnt))
+	V.local.sVal.Set(V.Passed.[V.Local.sKey].CurrentVal)
+	V.Local.sVarName.Set(V.Passed.[V.Local.sKey].Name)
+	F.Data.DataTable.AddRow("dtPassed","VendID",V.Passed.GLOBAL.Trim,"PassedVar",V.Local.sKey,"VarName",V.Local.sVarName,"VarVal",V.Local.sVal)
+F.Intrinsic.Control.Next(V.Local.iCnt)
+
+F.Data.DataTable.SaveToXML("dtPassed",0,True,V.Global.sPath)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.InitVal.End
+
+Program.Sub.Compare.Start
+F.Intrinsic.Control.Try
+V.local.sRet.Declare
+V.local.sKey.Declare
+V.local.sVal.Declare
+V.Local.sVarName.Declare
+V.Local.iCnt.Declare
+V.Local.sChgDate.Declare
+V.Local.sChgTime.Declare
+
+F.Intrinsic.String.Format(V.Ambient.Date,"MM/DD/YYYY",V.Local.sChgDate)
+F.Intrinsic.String.Format(V.Ambient.Time,"ttttt",V.Local.sChgTime)
+
+F.Data.DataTable.Create("dtPassed",True)
+F.Data.DataTable.AddColumn("dtPassed","VendID","String")
+F.Data.DataTable.AddColumn("dtPassed","PassedVar","String")
+F.Data.DataTable.AddColumn("dtPassed","VarName","String")
+F.Data.DataTable.AddColumn("dtPassed","VarVal","String")
+F.Data.DataTable.AddColumn("dtPassed","PrevValue","String")
+
+F.Intrinsic.Variable.ListCallerVars(False,V.local.sRet)
+F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+
+F.Intrinsic.Control.For(V.Local.iCnt,V.Local.sRet.LBound,V.Local.sRet.UBound,1)
+	V.Local.sKey.Set(V.Local.sRet(V.Local.iCnt))
+	V.local.sVal.Set(V.Passed.[V.Local.sKey].CurrentVal)
+	V.Local.sVarName.Set(V.Passed.[V.Local.sKey].Name)
+	F.Data.DataTable.AddRow("dtPassed","VendID",V.Passed.GLOBAL.Trim,"PassedVar",V.Local.sKey,"VarName",V.Local.sVarName,"VarVal",V.Local.sVal)
+F.Intrinsic.Control.Next(V.Local.iCnt)
+
+F.Intrinsic.Control.SelectCase(V.Caller.Switches)
+	F.Intrinsic.Control.Case("D")
+		F.Data.DataTable.AddColumn("dtPassed","Changed","Boolean")
+		F.Data.DataTable.Select("dtPassed","PassedVar = 'GLOBAL'",V.Local.sRet)
+		F.Data.DataTable.SetValue("dtPassed",V.Local.sRet,"PrevValue","Vendor deleted","Changed",True)
+	F.Intrinsic.Control.Case("N")
+		F.Data.DataTable.AddColumn("dtPassed","Changed","Boolean")
+		F.Data.DataTable.Select("dtPassed","PassedVar = 'GLOBAL'",V.Local.sRet)
+		F.Data.DataTable.SetValue("dtPassed",V.Local.sRet,"PrevValue","Vendor added","Changed",True)		
+	F.Intrinsic.Control.Case("O")
+		F.Data.DataTable.CreateFromXML("dtPrevVal",V.Global.sPath,True)	
+		F.Data.Dictionary.CreateFromDataTable("dictPrevVal","dtPrevVal","PassedVar","VarVal")
+		F.Data.Dictionary.SetDefaultReturn("dictPrevVal","")
+		F.Data.DataTable.FillFromDictionary("dtPassed","dictPrevVal","PassedVar","PrevValue")
+		F.Data.DataTable.AddExpressionColumn("dtPassed","Changed","Boolean","IIf(VarVal<>PrevValue,True,False)")		
+F.Intrinsic.Control.EndSelect
+
+F.Data.DataView.Create("dtPassed","dvPassed",22,"Changed=True","")
+
+F.Data.DataView.ToDataTable("dtPassed","dvPassed","dtAudit")
+
+F.Data.DataTable.AddColumn("dtAudit","CHG_PGM","String",V.Caller.Caller)
+F.Data.DataTable.AddColumn("dtAudit","CHG_USER","String",V.Caller.User)
+F.Data.DataTable.AddColumn("dtAudit","CHG_DATE","String",V.Local.sChgDate)
+F.Data.DataTable.AddColumn("dtAudit","CHG_TIME","String",V.Local.sChgTime)
+
+F.ODBC.Connection!conts.OpenCompanyConnection
+
+F.Data.DataTable.SaveToDB("dtAudit","conts","GCG_6157_VEND_MSTR_AUDIT","",128,"VendID@!@VENDOR_ID*!*VarName@!@FIELD_NAME*!*PrevValue@!@OLD_VALUE*!*VarVal@!@NEW_VALUE*!*CHG_PGM@!@CHG_PGM*!*CHG_USER@!@CHG_USER*!*CHG_DATE@!@CHG_DATE*!*CHG_TIME@!@CHG_TIME")
+
+F.ODBC.Connection!conts.Close
+
+F.Intrinsic.Control.If(V.Caller.Switches,=,"O")
+	F.Intrinsic.Control.CallSub(InitVal)
+F.Intrinsic.Control.Else
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.Compare.End
+
+Program.Sub.SetIcon.Start
+F.Intrinsic.Control.Try
+V.Local.sForm.Declare
+V.Local.bExists.Declare
+V.Local.sIcon.Declare
+V.Local.iCounter.Declare
+
+F.Intrinsic.String.Build("{0}\ART\gss2.ico",V.Caller.GlobalDir,v.Local.sIcon)
+F.Intrinsic.File.Exists(V.Local.sIcon, V.Local.bExists)
+F.Intrinsic.Control.If(V.Local.bExists.Not)
+    F.Intrinsic.String.Build("{0}\GAB\GAS\gss2.ico",V.Caller.PluginsDir,v.Local.sIcon)
+    F.Intrinsic.File.Exists(V.Local.sIcon, V.Local.bExists)
+    F.Intrinsic.Control.If(V.Local.bExists.Not)
+        F.Intrinsic.Control.ExitSub
+    F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.UI.GetFormList(V.Local.sForm)
+F.Intrinsic.String.Split(V.Local.sForm, "*!*", V.Local.sForm)
+
+F.Intrinsic.Control.For(V.Local.iCounter, 0, V.Local.sForm.UBound, 1)
+    Gui.[V.Local.sForm(V.Local.iCounter)]..Icon(V.Local.sIcon)
+F.Intrinsic.Control.Next(V.Local.iCounter)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.SetIcon.End
+
+Program.Sub.cmdRef_Click.Start
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.CallSub(ReportData)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdRef_Click.End
+
+Program.Sub.cmdCrystal_Click.Start
+F.Intrinsic.Control.Try
+V.Local.iRunID.Declare
+V.Local.iReportId.Declare
+V.Local.sReportId.Declare
+V.Local.iLog.Declare
+V.Local.iRet.Declare
+V.Local.sParams.Declare
+V.Local.sValues.Declare
+V.Local.sStart.Declare
+V.Local.sEnd.Declare
+
+V.Local.sStart.Set(V.Screen.frmMain!dtpStart.Value)
+V.Local.sEnd.Set(V.Screen.frmMain!dtpEnd.Value)
+
+F.Intrinsic.String.Format(V.Local.sStart,"yyyymmdd",V.Local.sStart)
+F.Intrinsic.String.Format(V.Local.sEnd,"yyyymmdd",V.Local.sEnd)
+
+F.Intrinsic.String.Build("StartDt*!*EndDt",,V.Local.sParams)
+F.Intrinsic.String.Build("{0}*!*{1}",V.Local.sStart,V.Local.sEnd,V.Local.sValues)
+
+F.Global.BI.GetRunID(V.Local.iRunID)
+F.Global.BI.GetIDFromName("GCG_6157_VEND_AUD.rpt",V.Local.iReportId)
+
+V.Local.sReportId.Set(V.Local.iReportId)
+
+F.Global.BI.StartLogging(V.Local.iRunID,V.Local.iReportId,0,"GCG_6157_VEND_AUD.rpt",V.Local.iRet)
+F.Global.BI.StopLogging(V.Local.iLog)
+
+F.Global.BI.RunReportPreProcessor(V.Local.iRunID,V.Local.iLog,V.Local.sParams,V.Local.sValues,V.Local.iReportId,16,TRUE,"",-1,"",-1,"","",V.Local.iRet)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Error,"SubRoutine",V.Ambient.CurrentSubroutine,"eNumber",V.Ambient.ErrorNumber,"eDescription",V.Ambient.ErrorDescription)
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdCrystal_Click.End
+
+Program.Sub.frmMain_UnLoad.Start
+F.Intrinsic.Control.End
+Program.Sub.frmMain_UnLoad.End
+
+Program.Sub.Error.Start
+V.Local.sError.Declare
+V.Local.iRet.Declare
+V.Local.sSep.Declare
+
+F.Intrinsic.String.Build("-------------------------------------------------------------------------------------",,V.Local.sSep)
+F.Intrinsic.String.Build("({5}-{6}){0}{7}{0}Project: {4}{0}{7}{0}Sub: {1}{0}Error: {2}, {3}", V.Ambient.NewLine, V.Args.SubRoutine, V.Args.eNumber, V.Args.eDescription,V.Caller.ScriptFile,V.Ambient.Date, V.Ambient.Time,V.Local.sSep,V.Local.sError)
+F.Intrinsic.UI.Msgbox(V.Local.sError,"Error",V.Local.iRet)
+Program.Sub.Error.End
